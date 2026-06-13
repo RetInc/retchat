@@ -1,5 +1,4 @@
-#ifndef PROTOCOL_H
-#define PROTOCOL_H
+#pragma once
 
 #include <stdint.h>
 
@@ -8,6 +7,7 @@
 #define BUFFER_SIZE 2048
 #define NAME_LEN 32
 #define ROOM_LEN 32
+
 
 // tipos de mensaje para el protocolo
 typedef enum {
@@ -22,5 +22,3 @@ typedef struct {
     uint8_t type;           // tipo de mensaje
     uint32_t length;        // longitud del payload
 } __attribute__((packed)) message_header_t;
-
-#endif

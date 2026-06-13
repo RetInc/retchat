@@ -1,15 +1,29 @@
-.PHONY: all linux windows clean
+CC = gcc
+CFLAGS = -Wall -std=c99 -O2 -pthread -I src/server
+LDFLAGS = -lssl -lcrypto
 
-all: linux windows
+BINDIR = bin
+SRCDIR = src
+SERVER_SRCS = $(SRCDIR)/server.c \
+              $(SRCDIR)/client.c \
+              $(SRCDIR)/commands.c \
+              $(SRCDIR)/dh.c
+SERVER_OBJS = $(SERVER_SRCS:.c=.o)
+TARGET = $(BINDIR)/server
 
-linux:
-	$(MAKE) -C linux -f Makefile.linux
+.PHONY: all clean
 
-windows:
-	@echo "para Windows, usa los scripts en la carpeta windows/"
-	@echo "  compile_MINGW.bat  - para MinGW"
-	@echo "  compile_MSVC.bat   - para MSVC"
+all: $(BINDIR) $(TARGET)
+
+$(BINDIR):
+	mkdir -p $(BINDIR)
+
+$(TARGET): $(SERVER_OBJS) | $(BINDIR)
+	$(CC) -o $@ $^ $(LDFLAGS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	$(MAKE) -C linux -f Makefile.linux clean
-	rm -rf bin/
+	rm -rf $(BINDIR)
+	find $(SRCDIR) -name '*.o' -delete
