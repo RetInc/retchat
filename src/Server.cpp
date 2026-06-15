@@ -73,7 +73,7 @@ namespace Retchat {
             }
             std::string ip = inet_ntoa(clientAddr.sin_addr);
             if (isIpBanned(ip)) {
-                Logger::warn("Blocked banned IP: " + ip);
+                Logger::warn("blocked banned IP: " + ip);
                 close(clientFd);
                 continue;
             }
@@ -220,19 +220,22 @@ namespace Retchat {
             }
         }
     }
+
     void Server::disconnectClient(Client* client, bool sendPacket) {
         if (sendPacket) {
             DisconnectPacket dp;
             client->sendPacket(dp);
         }
-        removeClient(client);
+        // forcefully close the socket from server side
+        shutdown(client->getSockfd(), SHUT_RDWR);
+        close(client->getSockfd());
     }
 
     void Server::kickClient(int fd) {
         std::lock_guard<std::mutex> lock(mutex);
         for (auto& pair : clients) {
             if (pair.second->getSockfd() == fd) {
-                Logger::info("Kicking client " + pair.second->getName() + " (fd=" + std::to_string(fd) + ")");
+                Logger::info("kicking client " + pair.second->getName() + " (fd=" + std::to_string(fd) + ")");
                 disconnectClient(pair.second, true);
                 return;
             }
@@ -312,7 +315,7 @@ namespace Retchat {
 
 // -------- MAIN ENTRYPOINT --------
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     int port = (argc > 1) ? atoi(argv[1]) : Retchat::DEFAULT_PORT;
     std::signal(SIGPIPE, SIG_IGN);
     Retchat::DH::init();
