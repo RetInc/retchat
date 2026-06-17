@@ -9,11 +9,11 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
+#include <arpa/inet.h>
 #include <chrono>
 #include <string>
 #include <unistd.h>
 #include <pthread.h>
-#include <arpa/inet.h>
 #include <poll.h>
 
 
