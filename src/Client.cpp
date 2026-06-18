@@ -78,6 +78,39 @@ namespace Retchat {
 
         BN_free(server_priv); BN_free(server_pub);
         BN_free(client_pub); BN_free(shared);
+
+        // expect the client to echo the same value back.
+        {
+            HandshakePacket verPkt;
+            verPkt.version = PROTOCOL_VERSION;
+            sendPacket(verPkt);
+
+            std::vector<uint8_t> plain;
+            if (!readFrame(plain) || plain.empty()) {
+                Logger::error("version exchange: no response from fd=" + std::to_string(sockfd));
+                return false;
+            }
+            if (plain[0] != PKT_HANDSHAKE) {
+                Logger::error("version exchange: unexpected packet type from fd=" + std::to_string(sockfd));
+                return false;
+            }
+            HandshakePacket clientVer;
+            if (!clientVer.deserialize(plain.data() + 1, plain.size() - 1) ||
+                clientVer.version != PROTOCOL_VERSION)
+            {
+                uint16_t cv = clientVer.version;  // capture before sendPacket uses encKey
+                SystemPacket err;
+                err.isError = true;
+                err.code    = MSG_VERSION_MISMATCH;
+                err.params  = { std::to_string(PROTOCOL_VERSION), std::to_string(cv) };
+                sendPacket(err);
+                Logger::warn("version mismatch on fd=" + std::to_string(sockfd) +
+                             ": expected " + std::to_string(PROTOCOL_VERSION) +
+                             ", got " + std::to_string(cv));
+                return false;
+            }
+        }
+
         return true;
 
     error:

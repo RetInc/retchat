@@ -21,9 +21,18 @@ namespace Retchat {
     };
 
     std::vector<uint8_t> serializeString(const std::string& str);
-    std::string deserializeString(const uint8_t* data, size_t& offset);
+    // Returns false if no null terminator is found within the remaining buffer.
+    bool deserializeString(const uint8_t* data, size_t len, size_t& offset, std::string& out);
 
     
+    class HandshakePacket : public Packet {
+    public:
+        uint16_t version = 0;
+        HandshakePacket() { type = PKT_HANDSHAKE; }
+        void serialize(std::vector<uint8_t>& out) const override;
+        bool deserialize(const uint8_t* data, size_t len) override;
+    };
+
     class KeepAlivePacket : public Packet {
     public:
         KeepAlivePacket() { type = PKT_KEEPALIVE; }

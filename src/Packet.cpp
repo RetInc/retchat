@@ -13,12 +13,16 @@ namespace Retchat {
         return out;
     }
 
-    std::string deserializeString(const uint8_t* data, size_t& offset) {
+    bool deserializeString(const uint8_t* data, size_t len, size_t& offset, std::string& out) {
+        if (offset >= len) return false;
         const uint8_t* start = data + offset;
-        while (data[offset] != 0) offset++;
-        std::string result(reinterpret_cast<const char*>(start), offset - (start - data));
-        offset++;  // skip null
-        return result;
+        const uint8_t* end   = data + len;
+        const uint8_t* nul   = static_cast<const uint8_t*>(
+            std::memchr(start, 0, end - start));
+        if (!nul) return false;  // no null terminator in remaining buffer
+        out.assign(reinterpret_cast<const char*>(start), static_cast<size_t>(nul - start));
+        offset = static_cast<size_t>(nul - data) + 1;
+        return true;
     }
 
     void Packet::serialize(std::vector<uint8_t>& out) const {
@@ -32,6 +36,7 @@ namespace Retchat {
 
     Packet* Packet::create(PacketType type) {
         switch (type) {
+            case PKT_HANDSHAKE:     return new HandshakePacket();
             case PKT_KEEPALIVE:     return new KeepAlivePacket();
             case PKT_KEEPALIVE_ACK: return new KeepAliveAckPacket();
             case PKT_NICK_REQUEST:  return new NickRequestPacket();
@@ -56,18 +61,25 @@ namespace Retchat {
     }
 
 
-    // --- KeepAlivePacket ---
-    void KeepAlivePacket::serialize(std::vector<uint8_t>& out) const {
-        // no payload
+    // --- HandshakePacket ---
+    void HandshakePacket::serialize(std::vector<uint8_t>& out) const {
+        out.push_back((version >> 8) & 0xFF);
+        out.push_back(version & 0xFF);
     }
+    bool HandshakePacket::deserialize(const uint8_t* data, size_t len) {
+        if (len != 2) return false;
+        version = static_cast<uint16_t>((data[0] << 8) | data[1]);
+        return true;
+    }
+
+    // --- KeepAlivePacket ---
+    void KeepAlivePacket::serialize(std::vector<uint8_t>& out) const {}
     bool KeepAlivePacket::deserialize(const uint8_t* data, size_t len) {
         return len == 0;
     }
 
     // --- KeepAliveAckPacket ---
-    void KeepAliveAckPacket::serialize(std::vector<uint8_t>& out) const {
-        // no payload
-    }
+    void KeepAliveAckPacket::serialize(std::vector<uint8_t>& out) const {}
     bool KeepAliveAckPacket::deserialize(const uint8_t* data, size_t len) {
         return len == 0;
     }
@@ -79,7 +91,7 @@ namespace Retchat {
     }
     bool NickRequestPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        newNick = deserializeString(data, off);
+        if (!deserializeString(data, len, off, newNick)) return false;
         return off == len;
     }
 
@@ -90,7 +102,7 @@ namespace Retchat {
     }
     bool NickAckPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        newNick = deserializeString(data, off);
+        if (!deserializeString(data, len, off, newNick)) return false;
         return off == len;
     }
 
@@ -103,8 +115,8 @@ namespace Retchat {
     }
     bool NickNotifyPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        oldNick = deserializeString(data, off);
-        newNick = deserializeString(data, off);
+        if (!deserializeString(data, len, off, oldNick)) return false;
+        if (!deserializeString(data, len, off, newNick)) return false;
         return off == len;
     }
 
@@ -115,7 +127,7 @@ namespace Retchat {
     }
     bool JoinRequestPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        roomName = deserializeString(data, off);
+        if (!deserializeString(data, len, off, roomName)) return false;
         return off == len;
     }
 
@@ -126,7 +138,7 @@ namespace Retchat {
     }
     bool JoinAckPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        roomName = deserializeString(data, off);
+        if (!deserializeString(data, len, off, roomName)) return false;
         return off == len;
     }
 
@@ -137,7 +149,7 @@ namespace Retchat {
     }
     bool JoinNotifyPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        nick = deserializeString(data, off);
+        if (!deserializeString(data, len, off, nick)) return false;
         return off == len;
     }
 
@@ -148,7 +160,7 @@ namespace Retchat {
     }
     bool LeaveNotifyPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        nick = deserializeString(data, off);
+        if (!deserializeString(data, len, off, nick)) return false;
         return off == len;
     }
 
@@ -162,7 +174,9 @@ namespace Retchat {
     bool RoomListPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
         while (off < len) {
-            rooms.push_back(deserializeString(data, off));
+            std::string room;
+            if (!deserializeString(data, len, off, room)) return false;
+            rooms.push_back(std::move(room));
         }
         return off == len;
     }
@@ -177,7 +191,9 @@ namespace Retchat {
     bool UserListPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
         while (off < len) {
-            users.push_back(deserializeString(data, off));
+            std::string user;
+            if (!deserializeString(data, len, off, user)) return false;
+            users.push_back(std::move(user));
         }
         return off == len;
     }
@@ -191,17 +207,16 @@ namespace Retchat {
     }
     bool ChatPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        text = deserializeString(data, off);
+        if (!deserializeString(data, len, off, sender)) return false;
+        if (!deserializeString(data, len, off, text))   return false;
         return off == len;
     }
 
     // --- SystemPacket ---
     void SystemPacket::serialize(std::vector<uint8_t>& out) const {
         out.push_back(isError ? 1 : 0);
-        // code (2 bytes, big-endian)
         out.push_back((code >> 8) & 0xFF);
         out.push_back(code & 0xFF);
-        // param count
         out.push_back(static_cast<uint8_t>(params.size()));
         for (const auto& p : params) {
             auto s = serializeString(p);
@@ -213,16 +228,21 @@ namespace Retchat {
         if (off >= len) return false;
         isError = (data[off++] != 0);
         if (off + 2 > len) return false;
-        code = (data[off] << 8) | data[off + 1];
+        code = static_cast<uint16_t>((data[off] << 8) | data[off + 1]);
         off += 2;
         if (off >= len) return false;
         uint8_t paramCount = data[off++];
+        constexpr uint8_t MAX_PARAMS = 16;
+        if (paramCount > MAX_PARAMS) return false;
         params.clear();
         for (uint8_t i = 0; i < paramCount; ++i) {
-            params.push_back(deserializeString(data, off));
+            std::string p;
+            if (!deserializeString(data, len, off, p)) return false;
+            params.push_back(std::move(p));
         }
         return off == len;
     }
+
     // --- DisconnectPacket ---
     void DisconnectPacket::serialize(std::vector<uint8_t>& out) const {}
     bool DisconnectPacket::deserialize(const uint8_t* data, size_t len) { return len == 0; }
@@ -234,8 +254,8 @@ namespace Retchat {
     }
     bool KickPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        reason = deserializeString(data, off);
-        return true;
+        if (!deserializeString(data, len, off, reason)) return false;
+        return off == len;
     }
 
     // --- BanPacket ---
@@ -245,8 +265,8 @@ namespace Retchat {
     }
     bool BanPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        reason = deserializeString(data, off);
-        return true;
+        if (!deserializeString(data, len, off, reason)) return false;
+        return off == len;
     }
 
     // --- DmRequestPacket ---
@@ -258,9 +278,9 @@ namespace Retchat {
     }
     bool DmRequestPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        targetNick = deserializeString(data, off);
-        text = deserializeString(data, off);
-        return true;
+        if (!deserializeString(data, len, off, targetNick)) return false;
+        if (!deserializeString(data, len, off, text))       return false;
+        return off == len;
     }
 
     // --- DmMsgPacket ---
@@ -272,12 +292,13 @@ namespace Retchat {
     }
     bool DmMsgPacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        senderNick = deserializeString(data, off);
-        text = deserializeString(data, off);
-        return true;
+        if (!deserializeString(data, len, off, senderNick)) return false;
+        if (!deserializeString(data, len, off, text))       return false;
+        return off == len;
     }
 
     // --- ImagePacket ---
+    constexpr size_t MAX_IMAGE_DATA_SIZE = 1 * 1024 * 1024;  // 1 MB
     void ImagePacket::serialize(std::vector<uint8_t>& out) const {
         auto s1 = serializeString(sender);
         auto s2 = serializeString(target);
@@ -291,14 +312,13 @@ namespace Retchat {
     }
     bool ImagePacket::deserialize(const uint8_t* data, size_t len) {
         size_t off = 0;
-        sender   = deserializeString(data, off);
-        target   = deserializeString(data, off);
-        mimeType = deserializeString(data, off);
-        fileName = deserializeString(data, off);
-        // remaining bytes are the image
-        if (off < len) {
-            imageData.assign(data + off, data + len);
-        }
+        if (!deserializeString(data, len, off, sender))   return false;
+        if (!deserializeString(data, len, off, target))   return false;
+        if (!deserializeString(data, len, off, mimeType)) return false;
+        if (!deserializeString(data, len, off, fileName)) return false;
+        size_t imageLen = len - off;
+        if (imageLen > MAX_IMAGE_DATA_SIZE) return false;
+        imageData.assign(data + off, data + len);
         return true;
     }
 

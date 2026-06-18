@@ -5,9 +5,11 @@
 
 namespace Retchat {
 
+    constexpr uint16_t PROTOCOL_VERSION = 1;
+
     // packet types
     enum PacketType : uint8_t {
-        PKT_HANDSHAKE      = 0x01,  // raw DH public key
+        PKT_HANDSHAKE      = 0x01,  // DH public key + protocol version
         PKT_KEEPALIVE      = 0x02,  // c2s: keep connection alive
         PKT_KEEPALIVE_ACK  = 0x03,  // s2c: keep alive ack
         PKT_NICK_REQUEST   = 0x10,  // c2s: new nickname
@@ -49,6 +51,7 @@ namespace Retchat {
         MSG_JOIN_NAME_TAKEN      = 9,
         MSG_DM_TARGET_NOT_FOUND  = 10,
         MSG_IMAGE_UNSUPPORTED    = 11,
+        MSG_VERSION_MISMATCH     = 12,
     };
 
 }
